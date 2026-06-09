@@ -2,8 +2,8 @@
 # github-contribution-log# Contribution [#]: [Issue Title]
 
 **Contribution Number:** [1 / 2 / 3]  
-**Student:** [Your Name]  
-**Issue:** [GitHub issue link]  
+**Student:** Supash Ramesha  
+**Issue:** https://github.com/quantumlib/Cirq/issues/5926
 **Status:** [Phase I / Phase II / Phase III / Phase IV] [In Progress / Complete]
 
 ---
