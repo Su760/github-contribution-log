@@ -1,16 +1,17 @@
 [contribution_readme (1).md](https://github.com/user-attachments/files/28768155/contribution_readme.1.md)
 # github-contribution-log# Contribution [#]: [Issue Title]
 
-**Contribution Number:** [1 / 2 / 3]  
+**Contribution Number:** 1  
 **Student:** Supash Ramesha  
 **Issue:** https://github.com/quantumlib/Cirq/issues/5926
-**Status:** [Phase I / Phase II / Phase III / Phase IV] [In Progress / Complete]
+**Status:** Phase I Complete
 
 ---
 
 ## Why I Chose This Issue
 
-[1-2 paragraphs explaining why this issue interests you, how it matches your skills/learning goals, what you hope to learn]
+I chose issue #5926 because it's a clear, reproducible bug in a well-maintained Python library that directly involves data output and measurement results — an area I'm comfortable reasoning about with my Python background. The fix involves modifying a default function that assumes base-2 arithmetic, updating it to handle arbitrary qudit dimensions, which is a bounded and well-scoped change.
+I'm also interested in learning how scientific computing libraries handle generalized data types. The maintainers have left helpful context in the comments pointing toward the fold_func as the root cause, which gives me a clear starting point heading into Phase II.
 
 ---
 
@@ -18,19 +19,19 @@
 
 ### Problem Description
 
-[In your own words, what's broken or missing?]
+The histogram() function defaults to treating measurement results as binary (base-2) numbers. When used with qudits (e.g. qutrits with dimension=3), it still applies base-2 math, producing incorrect output.
 
 ### Expected Behavior
 
-[What should happen?]
+For a qutrit circuit where each qubit measures value 2, the histogram result should be 26 (calculated as 2×9 + 2×3 + 2 in base 3).
 
 ### Current Behavior
 
-[What actually happens?]
+The function returns 7 — it's reading the measurement values [2, 2, 2] and computing 111 in binary, which equals 7.
 
 ### Affected Components
 
-[Which parts of the codebase are involved?]
+The histogram() function and its default fold_func parameter in the result types module of cirq-core. The fix likely lives around cirq/result/result_types.py.
 
 ---
 
