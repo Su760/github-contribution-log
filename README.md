@@ -1,174 +1,163 @@
-# Contribution #1: Histogram function doesn't fail for non-bool values
+# Contribution #1: histogram() uses base-2 math for qudit measurements
 
 **Contribution Number:** 1
 **Student:** Supash Ramesha
 **Issue:** https://github.com/quantumlib/Cirq/issues/5926
-**Status:** Phase III Complete
+**Pull Request:** https://github.com/quantumlib/Cirq/pull/8138 (merged)
+**Status:** Phase IV Complete — PR merged into quantumlib/Cirq main
 
 ---
 
 ## Why I Chose This Issue
 
-I chose issue #5926 because it's a clear, reproducible bug in a 
-well-maintained Python library that directly involves data output and 
-measurement results — an area I'm comfortable reasoning about with my 
-Python background. The fix involves modifying a default function that 
-assumes base-2 arithmetic, updating it to handle arbitrary qudit 
-dimensions, which is a bounded and well-scoped change.
+I picked issue #5926 because it was a clear, reproducible bug in a
+well-maintained Python library, and it touched measurement output — an area I
+felt comfortable reasoning about with my Python background. The fix came down
+to a default function that assumed base-2 arithmetic and needed to handle
+arbitrary qudit dimensions, which felt like a bounded, well-scoped change for a
+first contribution.
 
-I'm also interested in learning how scientific computing libraries handle 
-generalized data types. The maintainers have left helpful context in the 
-comments pointing toward the fold_func as the root cause, which gives me 
-a clear starting point heading into Phase II.
+I was also curious how scientific computing libraries deal with generalized
+data types. The maintainers had left helpful context in the comments pointing
+at `fold_func` as the root cause, which gave me a clear starting point.
 
 ---
 
 ## Understanding the Issue
 
 ### Problem Description
-The `histogram()` function defaults to treating measurement results as 
-binary (base-2) numbers. When used with qudits (e.g. qutrits with 
-dimension=3), it still applies base-2 math, producing incorrect output.
+The `histogram()` function defaults to treating measurement results as binary
+(base-2) numbers. When used with qudits (e.g. qutrits with dimension=3), it
+still applies base-2 math and produces incorrect output.
 
 ### Expected Behavior
-For a qutrit circuit where each qudit measures value `2`, the histogram 
-result should be `26` (calculated as 2×9 + 2×3 + 2 in base 3).
+For a qutrit measurement of `[2, 2, 2]`, the histogram result should be `26`
+(2×9 + 2×3 + 2 in base 3).
 
 ### Current Behavior
-The function returns `7` — it reads the measurement values `[2, 2, 2]` 
-and computes `111` in binary, which equals 7.
+The function returned `7` — it read `[2, 2, 2]` and computed `111` in binary,
+which is 7.
 
 ### Affected Components
-The `histogram()` function and its default `fold_func` parameter in 
-`cirq-core/cirq/study/result.py` (line ~216).
+The `histogram()` function and its default `fold_func` parameter in
+`cirq-core/cirq/study/result.py`.
 
 ---
 
 ## Reproduction Process
 
 ### Environment Setup
-- macOS, Python 3.13.11, using conda base environment
+- macOS, Python 3.13, conda base environment
 - Cloned fork: `git clone https://github.com/Su760/Cirq.git`
 - Installed in editable mode: `pip install -e ./cirq-core`
-- Hit pytest error `--benchmark-disable` unrecognized — fixed with 
-  `pip install pytest-benchmark`
-- Tests live in `cirq/study/` not `cirq/result/` — discovered via `ls cirq/`
+- Hit a pytest error about an unrecognized `--benchmark-disable` flag — fixed
+  with `pip install pytest-benchmark`
+- Tests live in `cirq/study/`, not `cirq/result/` — found via `ls cirq/`
 
 **Working branch:** https://github.com/Su760/Cirq/tree/fix-issue-5926
 
 ### Steps to Reproduce
 1. Clone the repo and run `pip install -e ./cirq-core`
-2. Create a Python file with a 3-qutrit circuit using `cirq.LineQid(n, dimension=3)`
-3. Apply `QutritPlusGate` twice to each qutrit (setting each to state `2`)
-4. Run `sim.run(circuit, repetitions=1)`
-5. Call `samples.histogram(key='out')` — no `qid_shape` argument
-6. **Expected:** `Counter({26: 1})` (base-3: 2×9 + 2×3 + 2)
-7. **Actual:** `Counter({7: 1})` (base-2: binary 111 = 7)
+2. Build a `ResultDict` with a qutrit measurement of `[2, 2, 2]`
+3. Call `result.histogram(key='q')` with no extra arguments
+4. **Expected:** `Counter({26: 1})` (base-3: 2×9 + 2×3 + 2)
+5. **Actual:** `Counter({7: 1})` (base-2: 111 = 7)
 
 ### Reproduction Evidence
-- Running `python test_bug.py` consistently returns `Counter({7: 1})`
-- Bug confirmed reproducible multiple times before fix
+- Running my `test_bug.py` consistently returned `Counter({7: 1})` before the fix
+- Confirmed reproducible multiple times
 
 ---
 
-## Solution Approach
+## Solution
 
 ### Analysis
-`histogram()` (line ~216 in `result.py`) has a hardcoded default 
-`fold_func=value.big_endian_bits_to_int` which always assumes base-2. 
-The `Result` object stores no qudit dimension info, so the fix must 
-expose dimension as a caller-supplied parameter.
+`histogram()` had a hardcoded default `fold_func=value.big_endian_bits_to_int`,
+which always assumes base-2. The `Result` object stores no qudit dimension
+info, so the fix had to expose the base as a caller-supplied parameter rather
+than trying to auto-detect it from the data.
 
-### Proposed Solution
-Add an optional `qid_shape: tuple[int, ...] | None = None` parameter to 
-`histogram()`. When provided, use `value.big_endian_digits_to_int(digits, 
-base=qid_shape)` instead of the base-2 default. When not provided, 
-behavior is unchanged — fully backward compatible.
+### What I Implemented
+I added an optional `fold_base` parameter to `histogram()`. When provided, the
+function converts the measurement digits using
+`value.big_endian_digits_to_int(digits, base=fold_base)` instead of the base-2
+default. When it's not provided, behavior is unchanged — fully backward
+compatible.
 
-### Implementation Plan
+`fold_base` accepts either a single `int` or an iterable of ints, matching what
+`big_endian_digits_to_int` already takes for its `base` argument. That means
+for same-dimension qudits you can just pass `fold_base=3` instead of repeating
+the shape like `(3, 3, 3)`.
 
-**Understand:** `histogram()` always uses base-2 math via 
-`big_endian_bits_to_int`, producing wrong results for qudits with 
-dimension > 2.
+I also added a `ValueError` when both `fold_func` and `fold_base` are passed,
+since they're mutually exclusive and silently ignoring one would be confusing.
 
-**Match:** `cirq.value.big_endian_digits_to_int(digits, base)` already 
-exists in the codebase and supports arbitrary bases — no new math needed.
-
-**Plan:**
-1. Add `fold_func: Callable[[tuple], T] | None = None` to signature
-2. Add `qid_shape: tuple[int, ...] | None = None` to signature
-3. Add if/else logic: use `big_endian_digits_to_int` with `qid_shape` 
-   as base when provided, else fall back to `big_endian_bits_to_int`
-4. Update docstring Args section to document `qid_shape`
-5. Add `test_histogram_qudits()` to `result_test.py`
-
-**Implement:** https://github.com/Su760/Cirq/tree/fix-issue-5926
-
-**Review:** Checked CONTRIBUTING.md — requires type annotations (added), 
-pytest tests (added), pylint compliance (no new lint issues).
-
-**Evaluate:** 155 tests pass (154 existing + 1 new qutrit test). 
-Manual `test_bug.py` now returns `Counter({np.int8(26): 1})` ✅
-
----
-
-## Testing Strategy
-
-### Unit Tests
-- [x] `test_histogram_qudits()` — verifies `qid_shape=(3,3,3)` returns 
-  `Counter({26: 1})` for measurement `[2,2,2]`
-- [x] Backward compatibility — verifies same call without `qid_shape` 
-  still returns `Counter({7: 1})`
-- [x] All 154 existing tests continue to pass
-
-### Manual Testing
-- Ran `python test_bug.py` before fix: `Got: 7` ✅
-- Ran `python test_bug.py` after fix with `qid_shape=(3,3,3)`: `Got: 26` ✅
-
----
-
-## Implementation Notes
-
-### Week 2 Progress
-**What I built:**
-- Modified `histogram()` in `cirq-core/cirq/study/result.py` to accept 
-  optional `qid_shape` parameter
-- Used existing `value.big_endian_digits_to_int` to handle arbitrary bases
-- Added `test_histogram_qudits()` to `cirq-core/cirq/study/result_test.py`
-- All 155 tests pass
-
-**Challenges faced:**
-- `Result` object stores no qudit dimension info — had to design the fix 
-  as a caller-supplied parameter rather than auto-detecting from the data
-- pytest wouldn't run due to missing `pytest-benchmark` dependency 
-  (not in docs for Mac users) — fixed with pip install
-- Folder structure differs from docs (`cirq/study/` not `cirq/result/`)
-
-**Files modified:**
+**Files changed:**
 - `cirq-core/cirq/study/result.py`
 - `cirq-core/cirq/study/result_test.py`
 
 ---
 
-## Pull Request
+## Testing
 
-**PR Link:** [To be added in Phase IV]
-**Status:** Phase III Complete — ready to submit PR
+### Unit Tests
+- `test_histogram_qudits()` verifies `fold_base=3` returns `Counter({26: 1})`
+  for a `[2, 2, 2]` measurement
+- Added a `pytest.raises(ValueError)` case for passing both `fold_func` and
+  `fold_base` at the same time
+- A second test was added during review covering `fold_base` set to a tuple
+- All existing tests in `cirq/study/` continue to pass
+
+### Manual Testing
+- `python test_bug.py` before the fix: `Got: 7`
+- `python test_bug.py` after, with `fold_base`: `Got: 26`
+
+---
+
+## Review & Merge
+
+The PR went through real back-and-forth with the maintainers before merging.
+The reviewer (pavoljuhas) requested a few changes:
+
+- Rename the new argument from my original `qid_shape` to `fold_base`, with the
+  same accepted values as `big_endian_digits_to_int` (so a single int works for
+  uniform qudits)
+- Fix the docstring indentation and reword it to make clear `fold_base` is a
+  convenience shorthand for `fold_func`
+- Drop an assertion I'd written that checked the old base-2 result for non-bit
+  values, since asserting that broken behavior as "correct" didn't make sense
+- Rewrite the PR description in my own words without the AI-style checklist
+
+I made each of those changes myself and replied to the comments. After that the
+reviewer approved, pushed two small tweak commits of his own, and the PR was
+merged via the merge queue (commit `2fa26d0`) with all checks passing.
 
 ---
 
 ## Learnings & Reflections
 
-### Technical Skills Gained
-- Navigating a large, unfamiliar Python codebase using targeted search
-- Understanding how base conversion works for generalized qudit systems
-- Writing backward-compatible API changes with optional parameters
+### Technical
+- Navigating a large unfamiliar codebase with targeted search instead of trying
+  to read everything
+- How base conversion generalizes from bits to arbitrary qudit bases
+- Writing a backward-compatible API change with an optional parameter
 
-### Challenges Overcome
-- Discovering the `Result` object has no dimension info required 
-  rethinking the fix design entirely
-- Mac-specific setup issues not covered in Linux-targeted docs
+### CI was the hardest part
+- Cirq's CI failures chain: fixing the formatting check exposed a coverage gap,
+  and vice versa. I learned to find the actual root cause before reacting.
+- The incremental coverage check requires a test for *every* new line — even a
+  short `ValueError` block needs its own `pytest.raises` test, which is what
+  failed coverage the first time around.
+- GitHub's fail-fast matrix cancels sibling jobs when one fails, so a wall of
+  "canceled" jobs doesn't mean a wall of new failures — it's usually one real
+  failure plus a lot of noise.
 
-### What I'd Do Differently Next Time
-- Read the full test file before writing new tests to match conventions
-  more closely from the start
+### Git
+- Clicking "Update branch" on GitHub creates a remote-only merge commit, which
+  diverges from local. Reconciling it meant a `git pull --no-rebase` and
+  accepting the merge commit.
+
+### What I'd do differently
+- Read the full test file and naming conventions before writing new tests
+- Write the PR description and comments in my own voice from the start —
+  reviewer feedback made it clear that AI-sounding text draws attention
