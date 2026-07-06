@@ -167,7 +167,7 @@ merged via the merge queue (commit `2fa26d0`) with all checks passing.
 
 **Contribution Number:** 2 
 **Student:** Supash Ramesha  
-**Issue:** [GitHub issue link]  
+**Issue:** https://github.com/scikit-learn/scikit-learn/issues/21305
 **Status:** Phase I
 
 ---
